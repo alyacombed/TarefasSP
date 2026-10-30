@@ -1,0 +1,24 @@
+CONTINUAR AQUI AMANHÃ — segue o plano aprovado (P1+P2+P3).
+
+CONTEXTO RÁPIDO:
+- Bot Discord (OrbitStore) automatiza tarefas da Sala do Futuro (edusp-api.ip.tv).
+- CF da edusp só passava via Node/curl qdo IP frio; solução atual: transporte por Chrome real (src/browserFetch.js) + captcha em RELAY (challenge sobrevive a resposta errada; só renova no botão "gerar nova imagem").
+- JÁ FEITO (não refazer): browserFetch.js, http.js com fallback, config.js proxy null, edusp.js relay contínuo (validarCandidata + fila streaming), ai.js solveCaptchaImage com onCandidata (first-wins) + leitores lens (chrome-lens-ocr), ocrspace, uapis; import fix do "r is not defined".
+- IMPORTANTE: o CAPTCHA tem EXATAMENTE 5 caracteres sempre (alfabeto 2-9a-zA-Z, 0/1 não existem).
+
+O QUE FALTA FAZER (plano aprovado):
+1) src/captchaImage.js: novo helper melhorVariante(base64, mime) -> { destaque, binarizada } (destaque = canal verde isolado/invertido 3x; binarizada = Otsu 3x). null se falhar.
+2) src/ai.js em solveCaptchaImage:
+   - computa melhorVariante UMA vez; dano: lens le do destaque, ocr.space do destaque, tesseract da binarizada, groq/browser-imagetotext leem original.
+   - pesos: lens 95->100; imagetotext-puppeteer 'browser' 100->85 (+ env CAPTCHA_OCR_IMAGETOTEXT_PUPPETEER default true).
+   - novo leitor lerOpenRouter(base64): POST https://openrouter.ai/api/v1/chat/completions, model qwen/qwen2.5-vl-32b-instruct:free (env OPENROUTER_VISION_MODEL), CAPTCHA_PROMPT + imagem data-URI, temperature 0, timeout 12s, pause 60s em falha, peso ~97, env CAPTCHA_OCR_OPENROUTER, usa OPENROUTER_API_KEY do .env. Correr no bloco paralelo/streaming.
+3) src/captchaStats.js (novo): stats por leitor { ok, total } em data/captcha_stats.json. edusp.js marca origem de cada candidata (onCandidata já passa pesonome) e registra acerto/erro por verificar. ai.js re-pesou pesos por taxa de acerto no boot (blend c/ peso estático), salva debounced, relê no restart.
+4) src/edusp.js relay:
+   - janela dirigida pelo solver (para quando fila.fechar() e fila vazia) + guard de 60s; remover JANELA_CANDIDATAS_MS fixo.
+   - MAX_CANDIDATAS_POR_IMAGEM 6->8.
+   - sleeps: 250-600 -> 120-300; variantes 400-900 -> 200-450.
+   - valida caracteres validos (2-9a-zA-Z) na submite (tamanho ja filtrado em ai.js).
+5) .env: adicionar hints OPENROUTER_API_KEY, OPENROUTER_VISION_MODEL, CAPTCHA_OCR_OPENROUTER, CAPTCHA_OCR_IMAGETOTEXT_PUPPETEER.
+6) TESTES: node --check em todos; import dos modulos; smoke melhorVariante (decode/re-encode PNG real) e lerOpenRouter (imagem sintetica, key do .env); reler bot (node start.js) p/ e2e. Lembrar: nao abrir perfis puppeteer em paralelo com o bot rodando (usar API_PUPPETEER_PROFILE temp se precisar).
+
+OBS: usuário só volta amanhã; rodar esse prompt no opencode e seguir os 6 passos.
